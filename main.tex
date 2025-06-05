@@ -1,5 +1,225 @@
 \documentclass[a4paper, 10pt]{article}
+\usepackage{tikz}
+\usepackage{ctable}
+\usepackage{amsmath}
+
+\title{Formal verification of Sesame}
+\author{Emmanuel MERA}
 
 \begin{document}
-Hello world !
+\maketitle
+
+\section{Introduction}
+	\subsection{Internship objectives}
+
+	\subsection{State of the art}
+
+	\subsection{Motivations}
+
+	\subsection{Overview of the work done}
+
+\section{The protocol behind Signal}
+	\subsection{Signal}
+		Signal is an open source application allowing users to communicate between them securely. It uses a similar protocol as in WhatsApp and is used by millions of active users. Each user may have several devices, adding and removing them whenever he pleases, that are kept synchronized. The conversations are encrypted end-to-end and the messages are transmitted from a device to another through a server.
+
+	\subsection{X3DH}
+		X3DH - or triple Diffie-Helman - is the key exchange protocol used by signal. It allows a device $A$ to initiate a secure and authenticated communication channel with another device $B$.
+		When $A$ wants to initiate a conversation with $B$, the protocol goes as follow.
+		
+		On the server is present 3 cryptographic informations about $B$ :
+		\begin{itemize}
+			\item a public identity key $IK_B^p$
+			\item a public long time signed pre-key $SPK_B^p$
+			\item a set, possibly empty, of public one-time per-key $OPK_B^p$
+		\end{itemize}
+		$A$ fetches from the server a prekey bundle for $B$, which contains $IK_B^p$, $SPK_B^p$ and, when one is available, $OPK_B^p$. The server then removes $OPK_B^p$ from the set of one-time pre-key.
+		$A$ generates a ephemeral key $EK_A$ and computes the key :
+		\[
+			PK = H(g1 || g2 || g3 || g4)
+		\]
+		where :
+		\begin{align*}
+			g1 &= DH(SPK_B^p, IK_A^s) \\
+			g2 &= DH(IK_B^p, EK_A^s) \\
+			g3 &= DH(SPK_B^p, EK_A^s) \\
+			g4 &= DH(OPK_B^p, EK_A^s)
+		\end{align*}
+		When $OPK_B^p$ is not available, $g4$ is not added in the computation of the key. $DH$ designates a Diffi-Helman function, $H$ a hash function and $||$ a concatenation function.
+		$A$ can finally publish on the server $IK_A^p$ alongside a first message, encrypted with an AEAD, and the ephemeral key as additional data for authentication. The process $A$ can then terminate and use the derived key $PK$ in future communication.
+		When $B$ fetch the initial message from the server, with the additional data $IK_A^p$, it can locally compute the public key $PK$ and try de decipher the message. If the message is deciphered and $IK_A^p$ authenticated, the key derived is the correct one and the protocol terminates, returning the derived key.
+
+	\subsection{Double-Ratchet}
+		The double-ratchet protocol is used in signal to update the symmetric key for every message. Because the tool we used for the cryptographic model (cryptoverif) does not allow for such manipulations of the key, we don't implement the double-ratchet protocol. Instead, we use the same key for the communications with this session.
+
+	\subsection{Sesame}
+		Sesame is the session management part of signal. It keeps the devices of a user synchronised and manages the communication between users and also with the server. Its API allows a device to send messages encrypted to other users, ensuring that all of the devices of the recipients receives the message and all the other devices of the sender are kept up-to-date. It also allows to decrypt messages received from the server.
+
+\section{Cryptoverif}
+	\subsection{Overview of the tool}
+
+	\subsection{Model}
+
+	\subsection{Theorems proved}
+
+	\subsection{Limitations}
+		\subsubsection{Of the model}
+
+		\subsubsection{Of the tool used}
+
+	\subsection{Future work}
+
+\section{Sesame in F*}
+	\subsection{Overview of the tool}
+
+	\subsection{Client implementation}
+
+	\subsection{Network model}
+
+	\subsection{Server implementation}
+
+	\subsection{Interface with CV2FStar}
+
+\section{Adjustments to the code extracted from cryptoverif}
+	\subsection{Cryptographic functions}
+
+	\subsection{Missing proofs}
+
+\section{Cryptographic proofs in F*}
+	\subsection{Authentication}
+
+	\subsection{Forward secrecy}
+
+	\subsection{Post-compromise security}
+
+\section{Conclusion}
+	\subsection{Work done}
+
+	\subsection{Other paths currently explored}
+
+	\subsection{Future work}
+
+
+
+
+%\section{Introduction}
+%
+%
+%
+%\subsection{Motivation}
+%
+%
+%\section{Description of the protocol}
+%
+%\subsection{Notations}
+%\begin{tabular}{ll}
+%Notation\hspace{2em} & Signification \\
+%\specialrule{.15em}{.1em}{.3em} 
+%$IK$ & identity key \\ 
+%\specialrule{.02em}{.1em}{.1em} 
+%$EK$ & ephemeral key \\ 
+%\specialrule{.02em}{.1em}{.1em} 
+%$SPK$ & signed prekey \\ 
+%\specialrule{.02em}{.1em}{.1em} 
+%$OPK$ & one-time prekey
+%\end{tabular}
+%
+%To simplify the notation, we associate to each of those symbols the private key and public key associated with it, as well as the owner of the key. Therefore, we note in the following way :
+%
+%\begin{itemize}
+%\item[$IK_B^p$] is the public identity key of $B$
+%\item[$EK_A^s$] is the secret ephemeral key of $A$
+%\item[$OPK_B^s$] is the secret one-time prekey of $B$
+%\end{itemize}
+%
+%\subsection{Overview}
+%
+%The Signal Protocol allows two users, Alice and Bob, to communicate securely over internet. It also allows a user to link several devices to the same account, and maintain the different devices synchronise.
+%
+%The protocol can be divided in two layers :
+%\begin{itemize}
+%\item The first layer allow one-to-one secure communication, giving an API for creating a such a secure connection, sending and receiving messages securely over the network. This part is handled by the double-ratchet protocol and a triple Diffie-Hellman key exchange.
+%\item The second layer uses the library given above to synchronise the devices of the users and add security with a session system.
+%\end{itemize}
+%
+%\subsection{3DH}
+%
+%In this section, Alice and Bob designates a particular physical device, and we are only concern in creating a one-to-one secure connection.
+%
+%When Alice wants to initiate a discussion with Bob, they first have to agree on an initial symmetric key. This key is constructed using a triple Diffie-Helmann protocol.
+%
+%Alice first gather from the server the identity of Bob $IK_B^p$, the signed long term prekey $SPK_B^p$ and a one-time prekey $OPK_B^p$, if any is available on the server at the time of the request.
+%
+%Alice then computes the following :
+%
+%\begin{itemize}
+%\item $g1 = DH(SPK_B^p, IK_A^s)$
+%\item $g2 = DH(IK_B^p, EK_A^s)$
+%\item $g3 = DH(SPK_B^p, EK_A^s)$
+%\item $g4 = DH(OPK_B^p, EK_A^s)$, when $OPK_B^p$ is available
+%\end{itemize}
+%
+%Where $DH$ is a Diffie-Helmann function, satisfying $DH(a^p, b^s) = DH(b^p, a^s)$.
+%
+%And Alice sends $EK_A^p$ and $IK_A^p$ to Bob. Because bob knows about $SPK_B^s$, $IK_B^s$ and $OPK_B^s$, it can also computes those values.
+%
+%The key can then be computed by both of the user as :
+%
+%$$
+%K = H(g1 || g2 || g3)
+%$$
+%
+%where $||$ is a concatenation function and $H$ is a hash function. $g4$ should be concatenated with the other values when available.
+%
+%\subsection{Double-Ratchet}
+%
+%We did not implement the double-ratchet protocol in our model because the tool is not fit for it, but we will still give an overview of the double-ratcheting here.
+%
+%\subsection{Sesame}
+%
+%\section{Tools used}
+%
+%\section{Cryptoverif}
+%
+%\subsection{Description of the tool}
+%Cryptoverif is a proof assistant specialized in cryptographic protocols. It uses rewriting rules to prove, in the computational model, secrecy and authentication proofs of protocols.
+%
+%In this tool, we created a model of the 3DH part of the protocol, followed by exchanges of messages using the symmetric key derived from 3DH.
+%
+%It is not possible in this tool to model the double-ratchet properly. The reason is the tool cannot model a key that changes at every encryption, because there is no notions of state, so we cannot forward the new key from one oracle call to another.
+%
+%\subsection{Initial model}
+%
+%We started the proof with a very simple initial model : a model where only one message is sent from Alice to Bob. It allowed us to prove the authentication of the two devices.
+%This model was only implementing a slight variation on the 3DH protocol used in Signal.
+%
+%\subsection{Extension with several messages}
+%
+%After that, we extended the protocol to allow several messages. Unlike the original protocol of signal, we are using the exact same encryption key to encrypt all the messages, instead of updating it with simple, or double-ratchet.
+%Several problems :
+%\begin{itemize}
+%\item Allowing several messages makes the protocol bigger and therefore the tool could not make some proofs of the protocol work in a reasonable amount of time
+%\item The way we were modelling some properties had to be rewritten
+%\end{itemize}
+%
+%\subsection{Extension with replies}
+%After the authentication, it becomes possible not only to send messages but also to receive them. We therefore added an oracle to be able to send messages in the other direction (from Bob to Alice).
+%For that, some changes were needed.
+%
+%From this point on, we have to be careful when doing encryption, because we might be using two times the same nonce (used by Alice and used by Bob) with the same key. Two solutions appear for this problem :
+%
+%\begin{itemize}
+%\item Either using two different set of nonce (for example, Bob use nonce starting with a 1 and Alice uses only the ones starting with a 0)
+%\item Either we cut the generated key in half, one half of the key will be used to encrypt messages for Alice, and the other one for Bob.
+%\end{itemize}
+%
+%The first solution was appealing at first because it was not requiring to touch the cryptographic arguments on the key. The problem became that the tool is not well feat to work with two separate oracles encrypting with the same key.
+%We therefore decided to go for the second solution and cut the key in half.
+%This allows the tool to treat separately the case of Alice and the case of Bob.
+%
+%After changing the game, the queries also had to be adapted, to take into account the authentication of the replied message.
+%For that, we added new events Recv2 and Send2, with an identical parameter and query as for Recv and Send.
+%
+%
+%\section{FStar}
+
 \end{document}
