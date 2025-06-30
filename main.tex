@@ -2,12 +2,51 @@
 \usepackage{tikz}
 \usepackage{ctable}
 \usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsfonts}
+\usepackage[a4paper, total={6in, 8.5in}]{geometry}
+\usepackage{tikzducks}
+\usepackage{scrlayer-scrpage}
+
+\usepackage[vlined]{algorithm2e}
 
 \title{Formal verification of Sesame}
 \author{Emmanuel MERA}
 
+\cfoot{%
+    \shuffleducks
+    \begin{tikzpicture}[scale=0.5] 
+        \duck[signpost=\scalebox{0.6}{\thepage},\randomhead]
+    \end{tikzpicture}
+} 
+
+%%%%%%%%%%%%%%%%%%%%%%%%
+%	TODOS              %
+%%%%%%%%%%%%%%%%%%%%%%%%
+
+%TODO | | change the name of the oracles in the implementation for better readability in the report.
+%TODO | | Add an annexe to go into more details on the CV implementation, I'll see
+
+%%%%%%%%%%%%%%%%%%%%%%%%
+%	Macros             %
+%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newcommand{\IK}[2]{\textrm{IK}_#1^#2}
+\newcommand{\SK}[2]{\textrm{SK}_#1^#2}
+\newcommand{\SPK}[2]{\textrm{SPK}_#1^#2}
+\newcommand{\OPK}[2]{\textrm{OPK}_#1^#2}
+\newcommand{\EK}[2]{\textrm{EK}_#1^#2}
+\newcommand{\sign}[1]{\textrm{s}#1}
+\newcommand{\cv}{CryptoVerif}
+
+%%%%%%%%%%%%%%%%%%%%%%%%
+%	Document           %
+%%%%%%%%%%%%%%%%%%%%%%%%
+
 \begin{document}
+
 \maketitle
+
 
 \section{Introduction}
 	\subsection{Internship objectives}
@@ -25,42 +64,197 @@
 	\subsection{X3DH}
 		X3DH - or triple Diffie-Helman - is the key exchange protocol used by signal. It allows a device $A$ to initiate a secure and authenticated communication channel with another device $B$.
 		When $A$ wants to initiate a conversation with $B$, the protocol goes as follow.
-		
 		On the server is present 3 cryptographic informations about $B$ :
 		\begin{itemize}
-			\item a public identity key $IK_B^p$
-			\item a public long time signed pre-key $SPK_B^p$
-			\item a set, possibly empty, of public one-time per-key $OPK_B^p$
+			\item a public identity key $\IK{B}{p}$
+			\item a public signature key $\SK{B}{p}$
+			\item a public long time signed prekey $\SPK{B}{p}$, alongside a signature $\sign{\SPK{B}{p}}$
+			\item a set, possibly empty, of public one-time per-key $\OPK{B}{p}$
 		\end{itemize}
-		$A$ fetches from the server a prekey bundle for $B$, which contains $IK_B^p$, $SPK_B^p$ and, when one is available, $OPK_B^p$. The server then removes $OPK_B^p$ from the set of one-time pre-key.
-		$A$ generates a ephemeral key $EK_A$ and computes the key :
-		\[
-			PK = H(g1 || g2 || g3 || g4)
-		\]
-		where :
+		$A$ fetches from the server a prekey bundle for $B$, which contains $\IK{B}{p}$, $\SPK{B}{p}$ and, when one is available, $\OPK{B}{p}$. The server then removes $\OPK{B}{p}$ from the set of one-time pre-key.
+		$A$ first check the signed prekey against the signature using $\SK{B}{p}$. If the check fails, $A$ does not initiate any connection and stops.
+		Else, $A$ generates an ephemeral key pair $\EK{A}{s}$ and $\EK{A}{p}$. It then computes the Diffie-Hellman keys :
 		\begin{align*}
-			g1 &= DH(SPK_B^p, IK_A^s) \\
-			g2 &= DH(IK_B^p, EK_A^s) \\
-			g3 &= DH(SPK_B^p, EK_A^s) \\
-			g4 &= DH(OPK_B^p, EK_A^s)
+			g1 &= DH(\SPK{B}{p}, \IK{A}{s}) \\
+			g2 &= DH(\IK{B}{p}, \EK{A}{s}) \\
+			g3 &= DH(\SPK{B}{p}, \EK{A}{s}) \\
+			g4 &= DH(\OPK{B}{p}, \EK{A}{s})
 		\end{align*}
-		When $OPK_B^p$ is not available, $g4$ is not added in the computation of the key. $DH$ designates a Diffi-Helman function, $H$ a hash function and $||$ a concatenation function.
+		$A$ computes the last derivation only when some $\OPK{B}{p}$ is available. When those are computed, $A$ can derive the shared key :
+		\[
+			K = H(g1 || g2 || g3 || g4)
+		\]
+		$H$ is a hash function (e.g. SHA2). In the case g4 is not available, it is not concatenated with the other and the derived key is $H(g1 || g2 || g3)$.
+		
+		When $\OPK{B}{p}$ is not available, $g4$ is not added in the computation of the key. $DH$ designates a Diffie-Hellman function, $H$ a hash function and $||$ a concatenation function.
 		$A$ can finally publish on the server $IK_A^p$ alongside a first message, encrypted with an AEAD, and the ephemeral key as additional data for authentication. The process $A$ can then terminate and use the derived key $PK$ in future communication.
-		When $B$ fetch the initial message from the server, with the additional data $IK_A^p$, it can locally compute the public key $PK$ and try de decipher the message. If the message is deciphered and $IK_A^p$ authenticated, the key derived is the correct one and the protocol terminates, returning the derived key.
+		When $B$ fetch the initial message from the server, with the additional data $\IK{A}{p}$, it can locally compute the public key $PK$ and try de decipher the message. If the message is deciphered and $IK_A^p$ authenticated, the key derived is the correct one and the protocol terminates, returning the derived key.
 
 	\subsection{Double-Ratchet}
-		The double-ratchet protocol is used in signal to update the symmetric key for every message. Because the tool we used for the cryptographic model (cryptoverif) does not allow for such manipulations of the key, we don't implement the double-ratchet protocol. Instead, we use the same key for the communications with this session.
+		The double-ratchet protocol is used in signal to update the symmetric key at each message. Because the tool we used for the cryptographic model (\cv) does not allow for such manipulations of the key, we don't implement the double-ratchet protocol. Instead, we use the same key for all communications with this session.
 
 	\subsection{Sesame}
-		Sesame is the session management part of signal. It keeps the devices of a user synchronised and manages the communication between users and also with the server. Its API allows a device to send messages encrypted to other users, ensuring that all of the devices of the recipients receives the message and all the other devices of the sender are kept up-to-date. It also allows to decrypt messages received from the server.
+		Sesame is the session management part of signal. It keeps the devices of a user synchronised and manages the communication between users. Its API allows a device to send messages encrypted to other users, ensuring that all of the devices of the recipients receives the message and all the other devices of the sender are kept up-to-date. It also allows to decrypt messages received from the server.
 
-\section{Cryptoverif}
+\section{\cv}
 	\subsection{Overview of the tool}
-
+	\cv is theorem prover for cryptography. It has the ability to write proofs of cryptographic protocols in the computational model. The proofs are derived using rewriting rules, transforming the game until the queries are proven. It is able to prove indistinguishability between two games and prove authentication queries.
 	\subsection{Model}
+	\cv is a tool made to prove small models. When given a too complex model (i.e. with a lot of branches and oracles), it becomes very difficult to write any proofs. Also, it does not provide any mechanism to manipulate a state. Therefore, we tried to model only the cryptographic part of the protocol using this tool, letting all the algorithmic part for FStar.
+	The cryptographic part of Signal is in two parts :
+	\begin{enumerate}
+		\item The key derivation protocol
+		\item The encrypted exchanges using this key
+	\end{enumerate}
+	
+	We model those two parts in \cv, and prove them secure in a way that will be make precise later.
+
+	To write this model, we rely on several cryptographic primitives from the standard library of \cv :
+	\begin{description}
+		\item[Diffie-Hellman] The Diffie-Hellman function serves in deriving the key. The documentation of Signal recommends to use Curve25519. In the standard library of \cv, there is a model of Curve25519. We add to this model the Gap Diffie-Hellman assumption.
+		We write $G$ the group of Curve25519 and $Z$ the set of exponents. We write $g$ a generator of the group and $g^a$ for $a\in Z$ the exponentiation function.
+		\item[Hash] The hash function is used to finalize the key derivation. In \cv, we model with the Radom Oracle Model.
+		\item[Signature] The signature is used only to sign the long time prekey and produce $\SPK{*}{s/p}$. It satisfies the UF-CMA assumption. We write Sign the set of signatures, and note $\sign{X}$ the signature of $X$.
+		\item[AEAD] The AEAD is used to encrypt the messages after deriving the key. We assume that the AEAD is IND-CPA and INT-CTXT for the encrypted messages, with authentication for the additional data.
+	\end{description}
+	
+	To describe the structure of the model, we will use the representation of \ref{CVRepr} to represent the oracles OA ; (OB $\mid$ OC).
+	
+	\begin{algorithm}[H]
+		\SetKwProg{Oracle}{Oracle}{}{}
+		\Oracle{OA}{\
+			\SetAlgoNoLine
+			\Oracle{OB}{}\
+			\Oracle{OC}{}
+		}\
+		\label{CVRepr}
+		\caption{Graphic representation of OA ; (OB $\mid$ OC)}
+	\end{algorithm}
+	
+	The cryptographic model has a structure given by algorithm \ref{CVModel}. The random oracle has been omitted for clarity but is included in the \cv model. The full model is given in \textbf{!!! GIVE REF FOR FULL CRYPTO MODEL !!!}. %TODO
+	
+	\begin{algorithm}
+		\SetKwData{Odeca}{Odec1}
+		\SetKwData{Oencb}{Odec2}
+		\SetKwProg{Oracle}{Oracle}{}{}
+		\SetKwComment{cmt}{(* }{ *)}
+		\cmt{Generates identities and returns $\IK{*}{p}$ and $\SK{*}{p}$.}
+		\Oracle{Ogenprinc: $G$ * pkey}{\
+			\SetAlgoNoLine
+			\cmt{Used to simulate the leaking of a key to the adversary}\
+			\Oracle{OCorrupt}{}
+		}
+		\cmt{Generates $\SPK{B}{p}$ alongside its signature $s\SPK{B}{p}$}
+		\Oracle{Osend1 ($\IK{b}{p}$: $G$): $G$*Sign}{\
+			\cmt{--------------------------------------------------}\
+			\cmt{This fist part is for the case where we are playing the protocol with a one-time prekey}\
+			\cmt{--------------------------------------------------}\
+			\cmt{Generates $\OPK{B}{p}$, a one time prekey}\
+			\Oracle{Osend2: $G$}{\
+				\cmt{Receives the initial message from $A$ and}\
+				\cmt{continues if the derived key is valid.}\
+				\Oracle{Osend3 ($\IK{A}{p}$: $G$, $\SK{A}{p}$: pkey, $\EK{A}{p}$: $G$, initial\_message)}{\
+					\SetAlgoNoLine
+					\cmt{Tries to decrypt the cipher.}\
+					\Oracle{Odec1(cipher, nonce): message}{}\
+					\cmt{Tries to encrypt the cipher using the given nonce.}\
+					\Oracle{Oenc2(message, nonce): cipher}{}
+				}\
+			}\
+			\cmt{--------------------------------------------------}\
+			\cmt{This second part is for the case where we are playing the protocol without a one-time prekey}\
+			\cmt{--------------------------------------------------}\
+			\cmt{Receives the initial message from $A$ and}\
+			\cmt{continues if the derived key is valid.}\
+			\Oracle{Osend4($\IK{A}{p}$: $G$, $\SK{A}{p}$: pkey, $\EK{A}{p}$: $G$, initial\_message)}{\
+				\SetAlgoNoLine
+				\cmt{Tries to decrypt the cipher.}\
+				\Oracle{Odec3(cipher, nonce): message}{}\
+				\cmt{Tries to encrypt the cipher using the given nonce.}\
+				\Oracle{Oenc4(message, nonce): cipher}{}
+			}\
+		}\
+		\cmt{--------------------------------------------------}\
+		\cmt{Creates an initial message if the prekey is well signed.}\
+		\cmt{--------------------------------------------------}\
+		\Oracle{Orecv1($\IK{A}{p}$: $G$, $\IK{B}{p}$: $G$, $\SK{B}{p}$: pkey, $\SPK{B}{p}$: $G$, $\sign{\SPK{B}{p}}$, $\OPK{B}{p}$: $G$)}{\
+			\SetAlgoNoLine
+			\cmt{Tries to encrypt the cipher using the given nonce.}\
+			\Oracle{Oenc1(message, nonce): cipher}{}\
+			\cmt{Tries to decrypt the cipher.}\
+			\Oracle{Odec2(cipher, nonce): message}{}
+		}\
+		\cmt{--------------------------------------------------}\
+		\cmt{Creates an initial message if the prekey is well signed.}\
+		\cmt{This version does not make use of a one-time prekey.}\
+		\cmt{--------------------------------------------------}\
+		\Oracle{Orecv2}{\
+			\SetAlgoNoLine
+			\cmt{Tries to encrypt the cipher using the given nonce.}\
+			\Oracle{Oenc3(message, nonce): cipher}{}\
+			\cmt{Tries to decrypt the cipher.}\
+			\Oracle{Odec4(cipher, nonce): message}{}
+		}
+		\label{CVModel}
+	\end{algorithm}
+	
+	The model that we have written should be read as followed :
+	
+	At the beginning, both Alice and Bob calls Ogenprinc to generate identity keys that they upload to the server. Bob wants to accept incoming communications so compute a long-time signed prekey $\SPK{B}{p}$ with Osend1 and a bunch of $\OPK{B}{p}$ calling several times Osend2. All of those are then uploaded to the server. Alice wants to start communicating with Bob so gather Bob's keys from the server. Alice then generates the initial message using Orecv1 - or Orecv2 in case no one-time prekey were available on the server at the time - and upload the values to the server. Bob at some point polls this initial message from the server and calls Osend3 - or Osend4 in case Alice did not use any one-time prekey - to verify the gathered informations. Once Bob authenticated Alice, they can both encrypt and decrypt messages using the appropriate Oend and Odec.
+	
+	\subsection{Implementations choices}
+		Some choices have been made to diverge from the documentation to have a simpler model. With the given model, \cv already struggles to run the proofs.
+		
+		\subsubsection{Adaptation to \cv AEAD hypothesis}
+		The AEAD in \cv requires that the nonce are used exactly once to encrypt messages for each key. The protocol is designed to create a common symmetric key. Therefore, there is a problem of distributing the nonce correctly between Alice and Bob. We saw two solutions available to us :
+		\begin{enumerate}
+			\item Adding a prefix to the nonces, for example adding a 1 for the nonce of Bob and a 0 for the nonce of Alice as a prefix.
+			\item Cutting the key in two parts, one part for Alice to encrypt, another for Bob to encrypt.
+		\end{enumerate}
+		
+		The first solution appeared to be the one that would keep us the closest to the original protocol. Unfortunately, it increases a lot the complexity of the model. Applying the hypothesis int\_ctxt becomes impossible for \cv because of the usage of the same key in different oracle. \cv generates a great amount of branches to account for those usages making it impossible for the tool to later conclude the proof.
+		
+		The second solution makes it possible for \cv to proofs the desired theorems. The key being cutted, the two parts can be assumes independently generated and makes the application of the int\_ctxt hypothesis possible and does not create intricate connections between the orales.
+		
+		\subsubsection{The composition of the additional data}
+		The data authenticated with the initial message are slightly different from the documentation. In our model, we authenticate $\IK{A}{p}$, $\SK{A}{p}$, $\IK{B}{p}$, $\SK{B}{p}$ and the ephemeral generated by $A$.
+		
+		\subsubsection{An empty initial message}
+		In the protocol, the initial message is assumed to be secret and therefore can carry real data. In the model however, we do not prove the secrecy of the first message. This is because proving the secrecy of this message requires to add a branching at the very beginning of the protocol and essentially doubles or even more the computation time of the proof. We were not able to make the prover run using this branching so the first message is not authenticated. We replaced it with a public message which in the implementation is a zero-length bitstring.
+		
+		\subsubsection{A case for neutral keys}
+		If Alice is given a set of keys which are all neutral elements, it derives a public key which is computable by the attacker (the neutral element). In theory, it should not be a problem because the probability of Bob generating a set of keys that are all the neutral element is negligable in the model and impossible in reality (because of the choice of exponents). But for \cv to understand that this is not a problem, it requires to handpick exactly what cryptographic assumption to apply and where, therefore making the proof less stable and more tedious to understand. It will though probably be done in the future.
 
 	\subsection{Theorems proved}
+	
+		\subsubsection{On the definition of corrupted session}
+		The definition of a corrupted session is subtle. Indeed, even in the case of identity key corruption with OCorrupt, a session might not be corrupted. A session is honest (not corrupted) if one of the following is true :
+		\begin{itemize}
+			\item The identity key of the other correspondent is not corrupted, e.g. when $A$ receives an $\IK{B}{p}$ that has not been corrupted.
+			\item The ephemeral prekey is valid (that is, generated by some oracle in the protocol and not by the adversary), e.g. the signed prekey $\SPK{B}{p}$ received by $A$ must have been generated by some $B$, or the ephemeral $\EK{A}{p}$ received by $B$ has been sent by some $A$.
+		\end{itemize}
+		
+		\subsubsection{Secrecy}
+		Message secrecy sent using the different Oenc and Odec has been proven. We have proven the indistinguishability between the two following game :
+		\begin{itemize}
+			\item We encrypt all messages using the AEAD
+			\item The messages we encrypt are not the original one but bitstring filled with zero of the same length when the session is not corrupted. If the session is corrupted, the messages are not secret so we do not replace the original message.
+		\end{itemize}
+		
+		In other words, it says that in the case the sessions is not corrupted, the attacker does not make the difference between the original message encrypted and the zero of this message encrypted.
 
+		\subsubsection{Authentication of initial message}
+		The authentication of the initial message is done only when $A$ is not corrupted. Indeed, if $A$ is corrupted then the attacker can forge an initial message.
+		We prove that for each initial message authenticated by $B$ has been sent by some $A$.
+		
+		In the case where the protocol with a one-time prekey, this relation can also been proved to be injective, that is the relation that, for each authenticated initial message received by $B$ associate the event of $A$ sending the message, is injective.
+		
+		When the protocol does not run with a one-time prekey, the attacker can replay the initial message of $A$ with the same keys and break the injectivity.
+		
+		\subsubsection{Authentication of other messages}
+		Further messages are authenticated separately for two reasons. First it makes the proof goal easier because the authentication of the initial message can be proven very early in the proof. Second, it is not possible to prove the injectivity of the relation.
+		Indeed, we do not prevent against decrypting two times the same message and therefore there is a replay attack against the injectivity.
+		
 	\subsection{Limitations}
 		\subsubsection{Of the model}
 
@@ -79,7 +273,7 @@
 
 	\subsection{Interface with CV2FStar}
 
-\section{Adjustments to the code extracted from cryptoverif}
+\section{Adjustments to the code extracted from \cv}
 	\subsection{Cryptographic functions}
 
 	\subsection{Missing proofs}
@@ -97,129 +291,5 @@
 	\subsection{Other paths currently explored}
 
 	\subsection{Future work}
-
-
-
-
-%\section{Introduction}
-%
-%
-%
-%\subsection{Motivation}
-%
-%
-%\section{Description of the protocol}
-%
-%\subsection{Notations}
-%\begin{tabular}{ll}
-%Notation\hspace{2em} & Signification \\
-%\specialrule{.15em}{.1em}{.3em} 
-%$IK$ & identity key \\ 
-%\specialrule{.02em}{.1em}{.1em} 
-%$EK$ & ephemeral key \\ 
-%\specialrule{.02em}{.1em}{.1em} 
-%$SPK$ & signed prekey \\ 
-%\specialrule{.02em}{.1em}{.1em} 
-%$OPK$ & one-time prekey
-%\end{tabular}
-%
-%To simplify the notation, we associate to each of those symbols the private key and public key associated with it, as well as the owner of the key. Therefore, we note in the following way :
-%
-%\begin{itemize}
-%\item[$IK_B^p$] is the public identity key of $B$
-%\item[$EK_A^s$] is the secret ephemeral key of $A$
-%\item[$OPK_B^s$] is the secret one-time prekey of $B$
-%\end{itemize}
-%
-%\subsection{Overview}
-%
-%The Signal Protocol allows two users, Alice and Bob, to communicate securely over internet. It also allows a user to link several devices to the same account, and maintain the different devices synchronise.
-%
-%The protocol can be divided in two layers :
-%\begin{itemize}
-%\item The first layer allow one-to-one secure communication, giving an API for creating a such a secure connection, sending and receiving messages securely over the network. This part is handled by the double-ratchet protocol and a triple Diffie-Hellman key exchange.
-%\item The second layer uses the library given above to synchronise the devices of the users and add security with a session system.
-%\end{itemize}
-%
-%\subsection{3DH}
-%
-%In this section, Alice and Bob designates a particular physical device, and we are only concern in creating a one-to-one secure connection.
-%
-%When Alice wants to initiate a discussion with Bob, they first have to agree on an initial symmetric key. This key is constructed using a triple Diffie-Helmann protocol.
-%
-%Alice first gather from the server the identity of Bob $IK_B^p$, the signed long term prekey $SPK_B^p$ and a one-time prekey $OPK_B^p$, if any is available on the server at the time of the request.
-%
-%Alice then computes the following :
-%
-%\begin{itemize}
-%\item $g1 = DH(SPK_B^p, IK_A^s)$
-%\item $g2 = DH(IK_B^p, EK_A^s)$
-%\item $g3 = DH(SPK_B^p, EK_A^s)$
-%\item $g4 = DH(OPK_B^p, EK_A^s)$, when $OPK_B^p$ is available
-%\end{itemize}
-%
-%Where $DH$ is a Diffie-Helmann function, satisfying $DH(a^p, b^s) = DH(b^p, a^s)$.
-%
-%And Alice sends $EK_A^p$ and $IK_A^p$ to Bob. Because bob knows about $SPK_B^s$, $IK_B^s$ and $OPK_B^s$, it can also computes those values.
-%
-%The key can then be computed by both of the user as :
-%
-%$$
-%K = H(g1 || g2 || g3)
-%$$
-%
-%where $||$ is a concatenation function and $H$ is a hash function. $g4$ should be concatenated with the other values when available.
-%
-%\subsection{Double-Ratchet}
-%
-%We did not implement the double-ratchet protocol in our model because the tool is not fit for it, but we will still give an overview of the double-ratcheting here.
-%
-%\subsection{Sesame}
-%
-%\section{Tools used}
-%
-%\section{Cryptoverif}
-%
-%\subsection{Description of the tool}
-%Cryptoverif is a proof assistant specialized in cryptographic protocols. It uses rewriting rules to prove, in the computational model, secrecy and authentication proofs of protocols.
-%
-%In this tool, we created a model of the 3DH part of the protocol, followed by exchanges of messages using the symmetric key derived from 3DH.
-%
-%It is not possible in this tool to model the double-ratchet properly. The reason is the tool cannot model a key that changes at every encryption, because there is no notions of state, so we cannot forward the new key from one oracle call to another.
-%
-%\subsection{Initial model}
-%
-%We started the proof with a very simple initial model : a model where only one message is sent from Alice to Bob. It allowed us to prove the authentication of the two devices.
-%This model was only implementing a slight variation on the 3DH protocol used in Signal.
-%
-%\subsection{Extension with several messages}
-%
-%After that, we extended the protocol to allow several messages. Unlike the original protocol of signal, we are using the exact same encryption key to encrypt all the messages, instead of updating it with simple, or double-ratchet.
-%Several problems :
-%\begin{itemize}
-%\item Allowing several messages makes the protocol bigger and therefore the tool could not make some proofs of the protocol work in a reasonable amount of time
-%\item The way we were modelling some properties had to be rewritten
-%\end{itemize}
-%
-%\subsection{Extension with replies}
-%After the authentication, it becomes possible not only to send messages but also to receive them. We therefore added an oracle to be able to send messages in the other direction (from Bob to Alice).
-%For that, some changes were needed.
-%
-%From this point on, we have to be careful when doing encryption, because we might be using two times the same nonce (used by Alice and used by Bob) with the same key. Two solutions appear for this problem :
-%
-%\begin{itemize}
-%\item Either using two different set of nonce (for example, Bob use nonce starting with a 1 and Alice uses only the ones starting with a 0)
-%\item Either we cut the generated key in half, one half of the key will be used to encrypt messages for Alice, and the other one for Bob.
-%\end{itemize}
-%
-%The first solution was appealing at first because it was not requiring to touch the cryptographic arguments on the key. The problem became that the tool is not well feat to work with two separate oracles encrypting with the same key.
-%We therefore decided to go for the second solution and cut the key in half.
-%This allows the tool to treat separately the case of Alice and the case of Bob.
-%
-%After changing the game, the queries also had to be adapted, to take into account the authentication of the replied message.
-%For that, we added new events Recv2 and Send2, with an identical parameter and query as for Recv and Send.
-%
-%
-%\section{FStar}
 
 \end{document}
